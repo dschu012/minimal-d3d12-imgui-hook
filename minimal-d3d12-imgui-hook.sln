@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.31321.278
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "minimal-d3d12-imgui-hook", "minimal-d3d12-imgui-hook.vcxproj", "{1F0C83EF-E7DA-4DE4-BF4E-48CCDCCAB2A5}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1F0C83EF-E7DA-4DE4-BF4E-48CCDCCAB2A5}.Release|x64.ActiveCfg = Release|x64
+		{1F0C83EF-E7DA-4DE4-BF4E-48CCDCCAB2A5}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {AA9DB163-DC12-419F-94E8-D205855C63AE}
+	EndGlobalSection
+EndGlobal

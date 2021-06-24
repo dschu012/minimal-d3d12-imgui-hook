@@ -1,0 +1,11 @@
+{
+  "name": "minimal-d3d12-imgui-hook",
+  "version-string": "0.0.1",
+  "dependencies": [
+    "minhook",
+    {
+      "name": "imgui",
+      "features": [ "win32-binding", "dx12-binding" ]
+    }
+  ]
+}
