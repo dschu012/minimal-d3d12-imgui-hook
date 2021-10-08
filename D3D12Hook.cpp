@@ -369,6 +369,8 @@ namespace D3D12 {
 		ImGuiIO& io = ImGui::GetIO();
 		g_PluginManager->WndProc(hWnd, msg, wParam, lParam);
 		switch (msg) {
+			//TODO FIX THIS!
+			/*
 		case WM_SIZE:
 			if (g_pd3dDevice != NULL && wParam != SIZE_MINIMIZED) {
 				ImGui_ImplDX12_InvalidateDeviceObjects();
@@ -382,6 +384,7 @@ namespace D3D12 {
 				auto ret = CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
 			}
 			break;
+			*/
 		case WM_LBUTTONDOWN:
 			io.MouseDown[0] = true;
 			return io.WantCaptureMouse ? 0 : CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
