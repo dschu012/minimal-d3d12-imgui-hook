@@ -48,6 +48,9 @@ namespace D3D12 {
 	typedef HRESULT(*Signal)(ID3D12CommandQueue* queue, ID3D12Fence* pFence, UINT64 pValue);
 	static Signal  OriginalSignal;
 
+	typedef long(__fastcall* ResizeBuffers)(IDXGISwapChain3* pSwapChain, UINT BufferCount, UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags);
+	static ResizeBuffers OriginalResizeBuffers;
+	
 	WNDPROC	OriginalWndProc;
 
 	DWORD PID;
@@ -70,7 +73,7 @@ namespace D3D12 {
 			DXGI_SWAP_CHAIN_DESC desc;
 			pSwapChain->GetDesc(&desc);
 			desc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
-			desc.OutputWindow = Window;
+			window = desc.OutputWindow;
 			desc.Windowed = ((GetWindowLongPtr(Window, GWL_STYLE) & WS_POPUP) != 0) ? false : true;
 
 			g_frameBufferCount = desc.BufferCount;
@@ -126,6 +129,8 @@ namespace D3D12 {
 		}
 		return true;
 	}
+	
+	LRESULT APIENTRY WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 	long __fastcall HookPresent(IDXGISwapChain3* pSwapChain, UINT SyncInterval, UINT Flags) {
 		if (g_pd3dDevice == nullptr) {
@@ -148,6 +153,8 @@ namespace D3D12 {
 				g_pd3dSrvDescHeap->GetCPUDescriptorHandleForHeapStart(),
 				g_pd3dSrvDescHeap->GetGPUDescriptorHandleForHeapStart());
 
+			OriginalWndProc = (WNDPROC)SetWindowLongPtr(window, GWLP_WNDPROC, (__int3264)(LONG_PTR)WndProc);
+				
 			g_PluginManager = new PluginManager();
 		}
 
@@ -205,7 +212,36 @@ namespace D3D12 {
 	HRESULT HookSignal(ID3D12CommandQueue* queue, ID3D12Fence* pFence, UINT64 Value) {
 		return OriginalSignal(queue, pFence, Value);
 	}
+	
+	void Shutdown() {
+		SetWindowLongPtr(window, GWLP_WNDPROC, (LONG_PTR)OriginalWndProc);
+		ImGui_ImplDX12_InvalidateDeviceObjects();
+		ImGui_ImplDX12_Shutdown();
+		ImGui_ImplWin32_Shutdown();
+		ImGui::DestroyContext();
+		SafeRelease(g_pd3dCommandQueue);
+		SafeRelease(g_pd3dCommandList);
+		g_frameContext[0].command_allocator->Release();
+		g_frameContext[0].command_allocator = nullptr;
+		const auto rtvDescriptorSize = g_pd3dDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+		D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = g_pd3dRtvDescHeap->GetCPUDescriptorHandleForHeapStart();
+		for (auto i = 0U; i < g_frameBufferCount; ++i) {
+			if (g_frameContext[i].main_render_target_resource) {
+				g_frameContext[i].main_render_target_resource->Release();
+				g_frameContext[i].main_render_target_resource = NULL;
+				rtvHandle.ptr -= rtvDescriptorSize;
+			}
+		}
+		SafeRelease(g_pd3dRtvDescHeap);
+		SafeRelease(g_pd3dSrvDescHeap);
+		delete[] g_frameContext;
+		SafeRelease(g_pd3dDevice);
+	}
 
+	long __fastcall HookResizeBuffers(IDXGISwapChain3* pSwapChain, UINT BufferCount, UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags) {
+		Shutdown();
+		return OriginalResizeBuffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
+	}
 
 	Status Init() {
 		WNDCLASSEX windowClass;
@@ -369,22 +405,6 @@ namespace D3D12 {
 		ImGuiIO& io = ImGui::GetIO();
 		g_PluginManager->WndProc(hWnd, msg, wParam, lParam);
 		switch (msg) {
-			//TODO FIX THIS!
-			/*
-		case WM_SIZE:
-			if (g_pd3dDevice != NULL && wParam != SIZE_MINIMIZED) {
-				ImGui_ImplDX12_InvalidateDeviceObjects();
-				ImGui_ImplWin32_Shutdown();
-				ImGui::DestroyContext();
-				SafeRelease(g_pd3dDevice);
-				SafeRelease(g_pd3dRtvDescHeap);
-				SafeRelease(g_pd3dSrvDescHeap);
-				SafeRelease(g_pd3dCommandQueue);
-				SafeRelease(g_pd3dCommandList);
-				auto ret = CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
-			}
-			break;
-			*/
 		case WM_LBUTTONDOWN:
 			io.MouseDown[0] = true;
 			return io.WantCaptureMouse ? 0 : CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
@@ -430,12 +450,11 @@ namespace D3D12 {
 	Status InstallHooks() {
 		Hook(54, (void**)&OriginalExecuteCommandLists, HookExecuteCommandLists);
 		Hook(140, (void**)&OriginalPresent, HookPresent);
+		Hook(145, (void**)&OriginalResizeBuffers, HookResizeBuffers);
 
 		//Hook(58, (void**)&OriginalSignal, HookSignal);
 		//Hook(84, (void**)&OriginalDrawInstanced, HookDrawInstanced);
 		//Hook(85, (void**)&OriginalDrawIndexedInstanced, HookDrawIndexedInstanced);
-
-		OriginalWndProc = (WNDPROC)SetWindowLongPtr(Window, GWLP_WNDPROC, (__int3264)(LONG_PTR)WndProc);
 
 		return Status::Success;
 	}
@@ -443,7 +462,8 @@ namespace D3D12 {
 	Status RemoveHooks() {
 		MH_DisableHook((void*)g_methodsTable[54]);
 		MH_DisableHook((void*)g_methodsTable[140]);
-
+		MH_DisableHook((void*)g_methodsTable[140]);
+		Shutdown();
 		//MH_DisableHook((void*)g_methodsTable[58]);
 		//MH_DisableHook((void*)g_methodsTable[84]);
 		//MH_DisableHook((void*)g_methodsTable[85]);
