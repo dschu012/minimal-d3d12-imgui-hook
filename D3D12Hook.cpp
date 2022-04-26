@@ -215,26 +215,33 @@ namespace D3D12 {
 	
 	void Shutdown() {
 		SetWindowLongPtr(window, GWLP_WNDPROC, (LONG_PTR)OriginalWndProc);
-		ImGui_ImplDX12_InvalidateDeviceObjects();
-		ImGui_ImplDX12_Shutdown();
-		ImGui_ImplWin32_Shutdown();
-		ImGui::DestroyContext();
+		if (ImGui::GetCurrentContext()) {
+			ImGui_ImplDX12_InvalidateDeviceObjects();
+			ImGui_ImplDX12_Shutdown();
+			ImGui_ImplWin32_Shutdown();
+			ImGui::DestroyContext();
+		}
 		SafeRelease(g_pd3dCommandQueue);
 		SafeRelease(g_pd3dCommandList);
-		g_frameContext[0].command_allocator->Release();
-		g_frameContext[0].command_allocator = nullptr;
-		const auto rtvDescriptorSize = g_pd3dDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-		D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = g_pd3dRtvDescHeap->GetCPUDescriptorHandleForHeapStart();
-		for (auto i = 0U; i < g_frameBufferCount; ++i) {
-			if (g_frameContext[i].main_render_target_resource) {
-				g_frameContext[i].main_render_target_resource->Release();
-				g_frameContext[i].main_render_target_resource = NULL;
-				rtvHandle.ptr -= rtvDescriptorSize;
+		if (g_frameBufferCount && g_frameContext) {
+			g_frameContext[0].command_allocator->Release();
+			g_frameContext[0].command_allocator = nullptr;
+		}
+		if (g_frameContext) {
+			const auto rtvDescriptorSize = g_pd3dDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+			D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = g_pd3dRtvDescHeap->GetCPUDescriptorHandleForHeapStart();
+			for (auto i = 0U; i < g_frameBufferCount; ++i) {
+				if (g_frameContext[i].main_render_target_resource) {
+					g_frameContext[i].main_render_target_resource->Release();
+					g_frameContext[i].main_render_target_resource = NULL;
+					rtvHandle.ptr -= rtvDescriptorSize;
+				}
 			}
 		}
 		SafeRelease(g_pd3dRtvDescHeap);
 		SafeRelease(g_pd3dSrvDescHeap);
-		delete[] g_frameContext;
+		if (g_frameContext)
+			delete[] g_frameContext;
 		SafeRelease(g_pd3dDevice);
 	}
 
