@@ -73,7 +73,7 @@ namespace D3D12 {
 			DXGI_SWAP_CHAIN_DESC desc;
 			pSwapChain->GetDesc(&desc);
 			desc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
-			window = desc.OutputWindow;
+			Window = desc.OutputWindow;
 			desc.Windowed = ((GetWindowLongPtr(Window, GWL_STYLE) & WS_POPUP) != 0) ? false : true;
 
 			g_frameBufferCount = desc.BufferCount;
@@ -153,7 +153,7 @@ namespace D3D12 {
 				g_pd3dSrvDescHeap->GetCPUDescriptorHandleForHeapStart(),
 				g_pd3dSrvDescHeap->GetGPUDescriptorHandleForHeapStart());
 
-			OriginalWndProc = (WNDPROC)SetWindowLongPtr(window, GWLP_WNDPROC, (__int3264)(LONG_PTR)WndProc);
+			OriginalWndProc = (WNDPROC)SetWindowLongPtr(Window, GWLP_WNDPROC, (__int3264)(LONG_PTR)WndProc);
 				
 			g_PluginManager = new PluginManager();
 		}
@@ -214,7 +214,7 @@ namespace D3D12 {
 	}
 	
 	void Shutdown() {
-		SetWindowLongPtr(window, GWLP_WNDPROC, (LONG_PTR)OriginalWndProc);
+		SetWindowLongPtr(Window, GWLP_WNDPROC, (LONG_PTR)OriginalWndProc);
 		if (ImGui::GetCurrentContext()) {
 			ImGui_ImplDX12_InvalidateDeviceObjects();
 			ImGui_ImplDX12_Shutdown();
