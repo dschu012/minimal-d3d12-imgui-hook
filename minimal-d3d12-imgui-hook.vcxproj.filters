@@ -8,11 +8,15 @@
     <ClCompile Include="D3D12Hook.cpp" />
     <ClCompile Include="plugin\PluginManager.cpp" />
     <ClCompile Include="plugin\sample\Sample.cpp" />
+    <ClCompile Include="imgui_impl\win32.cpp" />
+    <ClCompile Include="imgui_impl\dx12.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="D3D12Hook.h" />
     <ClInclude Include="plugin\PluginManager.h" />
     <ClInclude Include="plugin\Plugin.h" />
     <ClInclude Include="plugin\sample\Sample.h" />
+    <ClInclude Include="imgui_impl\win32.h" />
+    <ClInclude Include="imgui_impl\dx12.h" />
   </ItemGroup>
 </Project>

@@ -1,52 +1,51 @@
 #include "D3D12Hook.h"
+#include <cstdint>
+#include <d3d12.h>
+#include <dxgi1_4.h>
+
+#pragma comment(lib, "dxgi.lib")
+#pragma comment(lib, "d3d12.lib")
+
 #include <MinHook.h>
 #include <imgui.h>
-#include <imgui_impl_dx12.h>
-#include <imgui_impl_win32.h>
+#include "imgui_impl/dx12.h"
+#include "imgui_impl/win32.h"
 #include <stdio.h>
 #include <string>
 #include <chrono>
 #include <thread>
+#include <vector>
+#include <atlbase.h>
 #include "plugin/PluginManager.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 namespace D3D12 {
 
-	template<typename T>
-	static void SafeRelease(T*& res) {
-		if (res)
-			res->Release();
-		res = NULL;
-	}
+	struct FrameContext {
+		CComPtr<ID3D12CommandAllocator> command_allocator{ nullptr };
+		CComPtr<ID3D12Resource> main_render_target_resource{ nullptr };
+		D3D12_CPU_DESCRIPTOR_HANDLE main_render_target_descriptor{};
+	};
 
 	//https://github.com/ocornut/imgui/blob/master/examples/example_win32_directx12/main.cpp
 
 	// Data
-	static FrameContext* g_frameContext;
-	static UINT							g_frameBufferCount = 1;
+	static std::vector<FrameContext> g_frameContext;
+	static UINT g_frameBufferCount = 1;
+	static SIZE g_outSize{};
 
-	static ID3D12Device* g_pd3dDevice = NULL;
-	static ID3D12DescriptorHeap* g_pd3dRtvDescHeap = NULL;
-	static ID3D12DescriptorHeap* g_pd3dSrvDescHeap = NULL;
+	static CComPtr<ID3D12Device> g_pd3dDevice = NULL;
+	static CComPtr<ID3D12DescriptorHeap> g_pd3dRtvDescHeap = NULL;
+	static CComPtr<ID3D12DescriptorHeap> g_pd3dSrvDescHeap = NULL;
 	static ID3D12CommandQueue* g_pd3dCommandQueue = NULL;
-	static ID3D12GraphicsCommandList* g_pd3dCommandList = NULL;
-
+	static CComPtr<ID3D12GraphicsCommandList> g_pd3dCommandList = NULL;
 
 	typedef long(__fastcall* Present) (IDXGISwapChain3* pSwapChain, UINT SyncInterval, UINT Flags);
 	static Present OriginalPresent;
 
 	typedef void(*ExecuteCommandLists)(ID3D12CommandQueue* queue, UINT NumCommandLists, ID3D12CommandList* ppCommandLists);
 	static ExecuteCommandLists OriginalExecuteCommandLists;
-
-	typedef void(__fastcall* DrawInstanced)(ID3D12GraphicsCommandList* dCommandList, UINT VertexCountPerInstance, UINT InstanceCount, UINT StartVertexLocation, UINT StartInstanceLocation);
-	static DrawInstanced OriginalDrawInstanced;
-
-	typedef void(__fastcall* DrawIndexedInstanced)(ID3D12GraphicsCommandList* dCommandList, UINT IndexCount, UINT InstanceCount, UINT StartIndex, INT BaseVertex);
-	static DrawIndexedInstanced  OriginalDrawIndexedInstanced;
-
-	typedef HRESULT(*Signal)(ID3D12CommandQueue* queue, ID3D12Fence* pFence, UINT64 pValue);
-	static Signal  OriginalSignal;
 
 	typedef long(__fastcall* ResizeBuffers)(IDXGISwapChain3* pSwapChain, UINT BufferCount, UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags);
 	static ResizeBuffers OriginalResizeBuffers;
@@ -57,6 +56,8 @@ namespace D3D12 {
 	HWND Window = nullptr;
 
 	static uint64_t* g_methodsTable = NULL;
+
+	static bool g_initialized = false;
 
 	static PluginManager* g_PluginManager;
 
@@ -72,12 +73,13 @@ namespace D3D12 {
 		{
 			DXGI_SWAP_CHAIN_DESC desc;
 			pSwapChain->GetDesc(&desc);
-			desc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+
 			Window = desc.OutputWindow;
-			desc.Windowed = ((GetWindowLongPtr(Window, GWL_STYLE) & WS_POPUP) != 0) ? false : true;
+			g_outSize = { static_cast<LONG>(desc.BufferDesc.Width), static_cast<LONG>(desc.BufferDesc.Height) };
 
 			g_frameBufferCount = desc.BufferCount;
-			g_frameContext = new FrameContext[g_frameBufferCount];
+			g_frameContext.clear();
+			g_frameContext.resize(desc.BufferCount);
 		}
 
 		{
@@ -104,27 +106,22 @@ namespace D3D12 {
 			D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = g_pd3dRtvDescHeap->GetCPUDescriptorHandleForHeapStart();
 
 			for (size_t i = 0; i < g_frameBufferCount; i++) {
-				ID3D12Resource* pBackBuffer = nullptr;
-
 				g_frameContext[i].main_render_target_descriptor = rtvHandle;
-				pSwapChain->GetBuffer(i, IID_PPV_ARGS(&pBackBuffer));
-				g_pd3dDevice->CreateRenderTargetView(pBackBuffer, nullptr, rtvHandle);
-				g_frameContext[i].main_render_target_resource = pBackBuffer;
+				pSwapChain->GetBuffer(i, IID_PPV_ARGS(&g_frameContext[i].main_render_target_resource));
+				g_pd3dDevice->CreateRenderTargetView(g_frameContext[i].main_render_target_resource, nullptr, rtvHandle);
 				rtvHandle.ptr += rtvDescriptorSize;
 			}
 
 		}
 
 		{
-			ID3D12CommandAllocator* allocator;
-			if (g_pd3dDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)) != S_OK)
-				return false;
 
 			for (size_t i = 0; i < g_frameBufferCount; i++) {
-				g_frameContext[i].commandAllocator = allocator;
+				if (g_pd3dDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&g_frameContext[i].command_allocator)) != S_OK)
+					return false;
 			}
 
-			if (g_pd3dDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, NULL, IID_PPV_ARGS(&g_pd3dCommandList)) != S_OK || g_pd3dCommandList->Close() != S_OK)
+			if (g_pd3dDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, g_frameContext[0].command_allocator, NULL, IID_PPV_ARGS(&g_pd3dCommandList)) != S_OK || g_pd3dCommandList->Close() != S_OK)
 				return false;
 		}
 		return true;
@@ -133,18 +130,26 @@ namespace D3D12 {
 	LRESULT APIENTRY WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 	long __fastcall HookPresent(IDXGISwapChain3* pSwapChain, UINT SyncInterval, UINT Flags) {
+		if (g_pd3dCommandQueue == nullptr) {
+			return OriginalPresent(pSwapChain, SyncInterval, Flags);
+		}
 		if (g_pd3dDevice == nullptr) {
 			CreateDeviceD3D(pSwapChain);
-			IMGUI_CHECKVERSION();
-			ImGui::CreateContext();
-			ImGuiIO& io = ImGui::GetIO(); (void)io;
-			io.IniFilename = nullptr;
-			//io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-			//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+			if (ImGui::GetCurrentContext() == nullptr) {
+				IMGUI_CHECKVERSION();
+				ImGui::CreateContext();
+				ImGuiIO& io = ImGui::GetIO(); (void)io;
+				io.IniFilename = nullptr;
+				//io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+				//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
 
-			// Setup Dear ImGui style
-			ImGui::StyleColorsDark();
-			//ImGui::StyleColorsClassic();
+				// Setup Dear ImGui style
+				ImGui::StyleColorsDark();
+				//ImGui::StyleColorsClassic();
+				OriginalWndProc = (WNDPROC)SetWindowLongPtr(Window, GWLP_WNDPROC, (__int3264)(LONG_PTR)WndProc);
+
+				g_PluginManager = new PluginManager();
+			}
 
 			// Setup Platform/Renderer backends
 			ImGui_ImplWin32_Init(Window);
@@ -152,24 +157,18 @@ namespace D3D12 {
 				DXGI_FORMAT_R8G8B8A8_UNORM, g_pd3dSrvDescHeap,
 				g_pd3dSrvDescHeap->GetCPUDescriptorHandleForHeapStart(),
 				g_pd3dSrvDescHeap->GetGPUDescriptorHandleForHeapStart());
-
-			OriginalWndProc = (WNDPROC)SetWindowLongPtr(Window, GWLP_WNDPROC, (__int3264)(LONG_PTR)WndProc);
-				
-			g_PluginManager = new PluginManager();
+			ImGui_ImplDX12_CreateDeviceObjects(g_pd3dCommandQueue);
+			g_initialized = true;
 		}
 
-		if (g_pd3dCommandQueue == nullptr) {
-			return OriginalPresent(pSwapChain, SyncInterval, Flags);
-		}
-
-		ImGui_ImplDX12_NewFrame();
-		ImGui_ImplWin32_NewFrame();
+		ImGui_ImplDX12_NewFrame(g_pd3dCommandQueue);
+		ImGui_ImplWin32_NewFrame(g_outSize);
 		ImGui::NewFrame();
 
 		g_PluginManager->Present();
 
 		FrameContext& currentFrameContext = g_frameContext[pSwapChain->GetCurrentBackBufferIndex()];
-		currentFrameContext.commandAllocator->Reset();
+		currentFrameContext.command_allocator->Reset();
 
 		D3D12_RESOURCE_BARRIER barrier;
 		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -178,7 +177,7 @@ namespace D3D12 {
 		barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 		barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
 		barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-		g_pd3dCommandList->Reset(currentFrameContext.commandAllocator, nullptr);
+		g_pd3dCommandList->Reset(currentFrameContext.command_allocator, nullptr);
 		g_pd3dCommandList->ResourceBarrier(1, &barrier);
 		g_pd3dCommandList->OMSetRenderTargets(1, &currentFrameContext.main_render_target_descriptor, FALSE, nullptr);
 		g_pd3dCommandList->SetDescriptorHeaps(1, &g_pd3dSrvDescHeap);
@@ -200,53 +199,25 @@ namespace D3D12 {
 
 		OriginalExecuteCommandLists(queue, NumCommandLists, ppCommandLists);
 	}
-
-	void __fastcall HookDrawInstanced(ID3D12GraphicsCommandList* dCommandList, UINT VertexCountPerInstance, UINT InstanceCount, UINT StartVertexLocation, UINT StartInstanceLocation) {
-		OriginalDrawInstanced(dCommandList, VertexCountPerInstance, InstanceCount, StartVertexLocation, StartInstanceLocation);
-	}
-
-	void __fastcall HookDrawIndexedInstanced(ID3D12GraphicsCommandList* dCommandList, UINT IndexCount, UINT InstanceCount, UINT StartIndex, INT BaseVertex) {
-		OriginalDrawIndexedInstanced(dCommandList, IndexCount, InstanceCount, StartIndex, BaseVertex);
-	}
-
-	HRESULT HookSignal(ID3D12CommandQueue* queue, ID3D12Fence* pFence, UINT64 Value) {
-		return OriginalSignal(queue, pFence, Value);
-	}
 	
-	void Shutdown() {
-		SetWindowLongPtr(Window, GWLP_WNDPROC, (LONG_PTR)OriginalWndProc);
-		if (ImGui::GetCurrentContext()) {
-			ImGui_ImplDX12_InvalidateDeviceObjects();
+	void ResetState() {
+		if (g_initialized) {
+			g_initialized = false;
 			ImGui_ImplDX12_Shutdown();
 			ImGui_ImplWin32_Shutdown();
-			ImGui::DestroyContext();
 		}
-		SafeRelease(g_pd3dCommandQueue);
-		SafeRelease(g_pd3dCommandList);
-		if (g_frameBufferCount && g_frameContext) {
-			g_frameContext[0].command_allocator->Release();
-			g_frameContext[0].command_allocator = nullptr;
-		}
-		if (g_frameContext) {
-			const auto rtvDescriptorSize = g_pd3dDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-			D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = g_pd3dRtvDescHeap->GetCPUDescriptorHandleForHeapStart();
-			for (auto i = 0U; i < g_frameBufferCount; ++i) {
-				if (g_frameContext[i].main_render_target_resource) {
-					g_frameContext[i].main_render_target_resource->Release();
-					g_frameContext[i].main_render_target_resource = NULL;
-					rtvHandle.ptr -= rtvDescriptorSize;
-				}
-			}
-		}
-		SafeRelease(g_pd3dRtvDescHeap);
-		SafeRelease(g_pd3dSrvDescHeap);
-		if (g_frameContext)
-			delete[] g_frameContext;
-		SafeRelease(g_pd3dDevice);
+		g_frameContext.clear();
+		g_pd3dCommandList = nullptr;
+		g_pd3dRtvDescHeap = nullptr;
+		g_pd3dSrvDescHeap = nullptr;
+		g_pd3dDevice = nullptr;
+		g_outSize = { 0,0 };
 	}
 
 	long __fastcall HookResizeBuffers(IDXGISwapChain3* pSwapChain, UINT BufferCount, UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags) {
-		Shutdown();
+		if (g_initialized)
+			ResetState();
+
 		return OriginalResizeBuffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
 	}
 
@@ -293,14 +264,14 @@ namespace D3D12 {
 			return Status::UnknownError;
 		}
 
-		IDXGIFactory* factory;
+		CComPtr<IDXGIFactory> factory;
 		if (((long(__stdcall*)(const IID&, void**))(CreateDXGIFactory))(__uuidof(IDXGIFactory), (void**)&factory) < 0) {
 			::DestroyWindow(window);
 			::UnregisterClass(windowClass.lpszClassName, windowClass.hInstance);
 			return Status::UnknownError;
 		}
 
-		IDXGIAdapter* adapter;
+		CComPtr<IDXGIAdapter> adapter;
 		if (factory->EnumAdapters(0, &adapter) == DXGI_ERROR_NOT_FOUND) {
 			::DestroyWindow(window);
 			::UnregisterClass(windowClass.lpszClassName, windowClass.hInstance);
@@ -314,7 +285,7 @@ namespace D3D12 {
 			return Status::UnknownError;
 		}
 
-		ID3D12Device* device;
+		CComPtr<ID3D12Device> device;
 		if (((long(__stdcall*)(IUnknown*, D3D_FEATURE_LEVEL, const IID&, void**))(D3D12CreateDevice))(adapter, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device), (void**)&device) < 0) {
 			::DestroyWindow(window);
 			::UnregisterClass(windowClass.lpszClassName, windowClass.hInstance);
@@ -327,21 +298,21 @@ namespace D3D12 {
 		queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
 		queueDesc.NodeMask = 0;
 
-		ID3D12CommandQueue* commandQueue;
+		CComPtr<ID3D12CommandQueue> commandQueue;
 		if (device->CreateCommandQueue(&queueDesc, __uuidof(ID3D12CommandQueue), (void**)&commandQueue) < 0) {
 			::DestroyWindow(window);
 			::UnregisterClass(windowClass.lpszClassName, windowClass.hInstance);
 			return Status::UnknownError;
 		}
 
-		ID3D12CommandAllocator* commandAllocator;
+		CComPtr<ID3D12CommandAllocator> commandAllocator;
 		if (device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, __uuidof(ID3D12CommandAllocator), (void**)&commandAllocator) < 0) {
 			::DestroyWindow(window);
 			::UnregisterClass(windowClass.lpszClassName, windowClass.hInstance);
 			return Status::UnknownError;
 		}
 
-		ID3D12GraphicsCommandList* commandList;
+		CComPtr<ID3D12GraphicsCommandList> commandList;
 		if (device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocator, NULL, __uuidof(ID3D12GraphicsCommandList), (void**)&commandList) < 0) {
 			::DestroyWindow(window);
 			::UnregisterClass(windowClass.lpszClassName, windowClass.hInstance);
@@ -374,7 +345,7 @@ namespace D3D12 {
 		swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 		swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 
-		IDXGISwapChain* swapChain;
+		CComPtr<IDXGISwapChain> swapChain;
 		if (factory->CreateSwapChain(commandQueue, &swapChainDesc, &swapChain) < 0) {
 			::DestroyWindow(window);
 			::UnregisterClass(windowClass.lpszClassName, windowClass.hInstance);
@@ -382,17 +353,11 @@ namespace D3D12 {
 		}
 
 		g_methodsTable = (uint64_t*)::calloc(150, sizeof(uint64_t));
-		::memcpy(g_methodsTable, *(uint64_t**)device, 44 * sizeof(uint64_t));
-		::memcpy(g_methodsTable + 44, *(uint64_t**)commandQueue, 19 * sizeof(uint64_t));
-		::memcpy(g_methodsTable + 44 + 19, *(uint64_t**)commandAllocator, 9 * sizeof(uint64_t));
-		::memcpy(g_methodsTable + 44 + 19 + 9, *(uint64_t**)commandList, 60 * sizeof(uint64_t));
-		::memcpy(g_methodsTable + 44 + 19 + 9 + 60, *(uint64_t**)swapChain, 18 * sizeof(uint64_t));
-
-		SafeRelease(device);
-		SafeRelease(commandQueue);
-		SafeRelease(commandAllocator);
-		SafeRelease(commandList);
-		SafeRelease(swapChain);
+		::memcpy(g_methodsTable, *(uint64_t**)(void*)device, 44 * sizeof(uint64_t));
+		::memcpy(g_methodsTable + 44, *(uint64_t**)(void*)commandQueue, 19 * sizeof(uint64_t));
+		::memcpy(g_methodsTable + 44 + 19, *(uint64_t**)(void*)commandAllocator, 9 * sizeof(uint64_t));
+		::memcpy(g_methodsTable + 44 + 19 + 9, *(uint64_t**)(void*)commandList, 60 * sizeof(uint64_t));
+		::memcpy(g_methodsTable + 44 + 19 + 9 + 60, *(uint64_t**)(void*)swapChain, 18 * sizeof(uint64_t));
 
 		::DestroyWindow(window);
 		::UnregisterClass(windowClass.lpszClassName, windowClass.hInstance);
@@ -409,47 +374,49 @@ namespace D3D12 {
 	}
 
 	LRESULT APIENTRY WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-		ImGuiIO& io = ImGui::GetIO();
-		g_PluginManager->WndProc(hWnd, msg, wParam, lParam);
-		switch (msg) {
-		case WM_LBUTTONDOWN:
-			io.MouseDown[0] = true;
-			return io.WantCaptureMouse ? 0 : CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
-		case WM_LBUTTONUP:
-			io.MouseDown[0] = false;
-			return io.WantCaptureMouse ? 0 : CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
-		case WM_RBUTTONDOWN:
-			io.MouseDown[1] = true;
-			return io.WantCaptureMouse ? 0 : CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
-		case WM_RBUTTONUP:
-			io.MouseDown[1] = false;
-			return io.WantCaptureMouse ? 0 : CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
-		case WM_MBUTTONDOWN:
-			io.MouseDown[2] = true;
-			return io.WantCaptureMouse ? 0 : CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
-		case WM_MBUTTONUP:
-			io.MouseDown[2] = false;
-			return io.WantCaptureMouse ? 0 : CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
-		case WM_MOUSEWHEEL:
-			io.MouseWheel += GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? +1.0f : -1.0f;
-			return io.WantCaptureMouse ? 0 : CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
-		case WM_MOUSEMOVE:
-			io.MousePos.x = (signed short)(lParam);
-			io.MousePos.y = (signed short)(lParam >> 16);
-			return io.WantCaptureMouse ? 0 : CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
-		case WM_KEYDOWN:
-			if (wParam < 256)
-				io.KeysDown[wParam] = 1;
-			return io.WantCaptureKeyboard ? 0 : CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
-		case WM_KEYUP:
-			if (wParam < 256)
-				io.KeysDown[wParam] = 0;
-			return io.WantCaptureKeyboard ? 0 : CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
-		case WM_CHAR:
-			// You can also use ToAscii()+GetKeyboardState() to retrieve characters.
-			if (wParam > 0 && wParam < 0x10000)
-				io.AddInputCharacter((unsigned short)wParam);
-			return io.WantCaptureKeyboard ? 0 : CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
+		if (g_initialized) {
+			ImGuiIO& io = ImGui::GetIO();
+			g_PluginManager->WndProc(hWnd, msg, wParam, lParam);
+			switch (msg) {
+			case WM_LBUTTONDOWN:
+				io.MouseDown[0] = true;
+				return io.WantCaptureMouse ? 0 : CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
+			case WM_LBUTTONUP:
+				io.MouseDown[0] = false;
+				return io.WantCaptureMouse ? 0 : CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
+			case WM_RBUTTONDOWN:
+				io.MouseDown[1] = true;
+				return io.WantCaptureMouse ? 0 : CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
+			case WM_RBUTTONUP:
+				io.MouseDown[1] = false;
+				return io.WantCaptureMouse ? 0 : CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
+			case WM_MBUTTONDOWN:
+				io.MouseDown[2] = true;
+				return io.WantCaptureMouse ? 0 : CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
+			case WM_MBUTTONUP:
+				io.MouseDown[2] = false;
+				return io.WantCaptureMouse ? 0 : CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
+			case WM_MOUSEWHEEL:
+				io.MouseWheel += GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? +1.0f : -1.0f;
+				return io.WantCaptureMouse ? 0 : CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
+			case WM_MOUSEMOVE:
+				io.MousePos.x = (signed short)(lParam);
+				io.MousePos.y = (signed short)(lParam >> 16);
+				return io.WantCaptureMouse ? 0 : CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
+			case WM_KEYDOWN:
+				if (wParam < 256)
+					io.KeysDown[wParam] = 1;
+				return io.WantCaptureKeyboard ? 0 : CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
+			case WM_KEYUP:
+				if (wParam < 256)
+					io.KeysDown[wParam] = 0;
+				return io.WantCaptureKeyboard ? 0 : CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
+			case WM_CHAR:
+				// You can also use ToAscii()+GetKeyboardState() to retrieve characters.
+				if (wParam > 0 && wParam < 0x10000)
+					io.AddInputCharacter((unsigned short)wParam);
+				return io.WantCaptureKeyboard ? 0 : CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
+			}
 		}
 		return CallWindowProc(OriginalWndProc, hWnd, msg, wParam, lParam);
 	}
@@ -458,22 +425,16 @@ namespace D3D12 {
 		Hook(54, (void**)&OriginalExecuteCommandLists, HookExecuteCommandLists);
 		Hook(140, (void**)&OriginalPresent, HookPresent);
 		Hook(145, (void**)&OriginalResizeBuffers, HookResizeBuffers);
-
-		//Hook(58, (void**)&OriginalSignal, HookSignal);
-		//Hook(84, (void**)&OriginalDrawInstanced, HookDrawInstanced);
-		//Hook(85, (void**)&OriginalDrawIndexedInstanced, HookDrawIndexedInstanced);
-
 		return Status::Success;
 	}
 
 	Status RemoveHooks() {
 		MH_DisableHook((void*)g_methodsTable[54]);
 		MH_DisableHook((void*)g_methodsTable[140]);
-		MH_DisableHook((void*)g_methodsTable[140]);
-		Shutdown();
-		//MH_DisableHook((void*)g_methodsTable[58]);
-		//MH_DisableHook((void*)g_methodsTable[84]);
-		//MH_DisableHook((void*)g_methodsTable[85]);
+		MH_DisableHook((void*)g_methodsTable[145]);
+		ResetState();
+		ImGui::DestroyContext();
+		SetWindowLongPtrA(Window, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(OriginalWndProc));
 		return Status::Success;
 	}
 
