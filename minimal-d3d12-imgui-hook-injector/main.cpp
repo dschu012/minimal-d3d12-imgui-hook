@@ -20,7 +20,7 @@ void InjectDLL(const int& pid, const std::wstring& path);
 int main(int argc, char* argv[])
 {
 	if (argc != 2) {
-		std::wcerr << L"Provide the process name as an argument: ./minimal-d3d12-imgui-hook-injector.exe \"MyGame.exe\"" << std::endl;
+		std::wcerr << L"Provide the process name as an argument or add it in Debug > Command Argument: ./minimal-d3d12-imgui-hook-injector.exe \"MyGame.exe\"" << std::endl;
 		exit(-1);
 	}
 	wchar_t** wargv = CommandLineToArgvW(GetCommandLineW(), &argc);
