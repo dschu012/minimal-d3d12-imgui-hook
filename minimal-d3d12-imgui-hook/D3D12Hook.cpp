@@ -65,15 +65,6 @@ namespace D3D12 {
 
 	static PluginManager* g_PluginManager;
 
-	/**
-	* We aren't really creating a device here, but I wanted to follow IMGUI's
-	* naming conventions.
-	**/
-	bool CreateDeviceD3D(IDXGISwapChain3* pSwapChain) {
-		
-		return true;
-	}
-
 	long __fastcall HookPresent(IDXGISwapChain3* pSwapChain, UINT SyncInterval, UINT Flags) {
 		if (g_pD3DCommandQueue == nullptr) {
 			return OriginalPresent(pSwapChain, SyncInterval, Flags);
