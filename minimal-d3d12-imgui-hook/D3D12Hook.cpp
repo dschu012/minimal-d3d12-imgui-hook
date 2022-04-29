@@ -56,9 +56,6 @@ namespace D3D12 {
 	typedef long(__fastcall* ResizeBuffers)(IDXGISwapChain3* pSwapChain, UINT BufferCount, UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags);
 	static ResizeBuffers OriginalResizeBuffers;
 
-	typedef long(__fastcall* ResizeTarget)(IDXGISwapChain* pSwapChain, const DXGI_MODE_DESC* pNewTargetParameters);
-	static ResizeTarget OriginalResizeTarget;
-
 	WNDPROC	OriginalWndProc;
 	HWND Window = nullptr;
 
@@ -229,11 +226,6 @@ namespace D3D12 {
 	long HookResizeBuffers(IDXGISwapChain3* pSwapChain, UINT BufferCount, UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags) {
 		ResetState();
 		return OriginalResizeBuffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
-	}
-
-	long HookResizeTarget(IDXGISwapChain* pSwapChain, const DXGI_MODE_DESC* pNewTargetParameters) {
-		ResetState();
-		return OriginalResizeTarget(pSwapChain, pNewTargetParameters);
 	}
 
 	Status Init() {
@@ -440,8 +432,7 @@ namespace D3D12 {
 		Hook(54, (void**)&OriginalExecuteCommandLists, HookExecuteCommandLists);
 		Hook(140, (void**)&OriginalPresent, HookPresent);
 		Hook(145, (void**)&OriginalResizeBuffers, HookResizeBuffers);
-		Hook(146, (void**)&OriginalResizeTarget, HookResizeTarget);
-
+		
 		g_PluginManager = new PluginManager();
 
 		return Status::Success;
@@ -451,7 +442,6 @@ namespace D3D12 {
 		MH_DisableHook((void*)g_MethodsTable[54]);
 		MH_DisableHook((void*)g_MethodsTable[140]);
 		MH_DisableHook((void*)g_MethodsTable[145]);
-		MH_DisableHook((void*)g_MethodsTable[146]);
 
 		g_PluginManager = nullptr;
 
