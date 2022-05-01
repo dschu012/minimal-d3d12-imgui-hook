@@ -1,4 +1,5 @@
 {
+  "$comment": "detours or minhook can be used for hooking. if both dependencies exist then detours is used.",
   "name": "minimal-d3d12-imgui-hook",
   "version-string": "0.0.1",
   "dependencies": [

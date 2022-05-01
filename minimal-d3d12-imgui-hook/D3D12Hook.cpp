@@ -1,5 +1,4 @@
 #include "D3D12Hook.h"
-#include <MinHook.h>
 #include <d3d12.h>
 #include <dxgi1_4.h>
 #include <imgui.h>
@@ -11,7 +10,18 @@
 #include <thread>
 #include "plugin/PluginManager.h"
 #include <atlbase.h>
+#include <fstream>
 
+
+#if __has_include(<detours/detours.h>)
+#include <detours/detours.h>
+#define USE_DETOURS
+#elif __has_include(<MinHook.h>)
+#include <MinHook.h>
+#define USE_MINHOOK
+#else
+#error "No hooking library defined!"
+#endif
 
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3d12.lib")
@@ -238,8 +248,6 @@ namespace D3D12 {
 
 		HWND window = ::CreateWindow(windowClass.lpszClassName, L"Fake DirectX Window", WS_OVERLAPPEDWINDOW, 0, 0, 100, 100, NULL, NULL, windowClass.hInstance, NULL);
 
-		MH_Initialize();
-
 		HMODULE libDXGI;
 		HMODULE libD3D12;
 
@@ -365,9 +373,32 @@ namespace D3D12 {
 
 	Status Hook(uint16_t _index, void** _original, void* _function) {
 		void* target = (void*)g_MethodsTable[_index];
+#ifdef USE_DETOURS
+		* _original = target;
+		DetourTransactionBegin();
+		DetourUpdateThread(GetCurrentThread());
+		DetourAttach(&(PVOID&)*_original, _function);
+		DetourTransactionCommit();
+#endif
+#ifdef USE_MINHOOK
 		if (MH_CreateHook(target, _function, _original) != MH_OK || MH_EnableHook(target) != MH_OK) {
 			return Status::UnknownError;
 		}
+#endif
+		return Status::Success;
+	}
+
+	Status Unhook(uint16_t _index, void** _original, void* _function) {
+		void* target = (void*)g_MethodsTable[_index];
+#ifdef USE_DETOURS
+		DetourTransactionBegin();
+		DetourUpdateThread(GetCurrentThread());
+		DetourDetach(&(PVOID&)*_original, _function);
+		DetourTransactionCommit();
+#endif
+#ifdef USE_MINHOOK
+		MH_DisableHook(target);
+#endif
 		return Status::Success;
 	}
 
@@ -420,6 +451,13 @@ namespace D3D12 {
 	}
 
 	Status InstallHooks() {
+#ifdef USE_DETOURS
+		DetourRestoreAfterWith();
+#endif
+#ifdef USE_MINHOOK
+		MH_Initialize();
+#endif
+
 		Hook(54, (void**)&OriginalExecuteCommandLists, HookExecuteCommandLists);
 		Hook(140, (void**)&OriginalPresent, HookPresent);
 		Hook(145, (void**)&OriginalResizeBuffers, HookResizeBuffers);
@@ -430,16 +468,21 @@ namespace D3D12 {
 	}
 
 	Status RemoveHooks() {
-		MH_DisableHook((void*)g_MethodsTable[54]);
-		MH_DisableHook((void*)g_MethodsTable[140]);
-		MH_DisableHook((void*)g_MethodsTable[145]);
+		Unhook(54, (void**)&OriginalExecuteCommandLists, HookExecuteCommandLists);
+		Unhook(140, (void**)&OriginalPresent, HookPresent);
+		Unhook(145, (void**)&OriginalResizeBuffers, HookResizeBuffers);
+
+		if (!Window && !OriginalWndProc) {
+			SetWindowLongPtr(Window, GWLP_WNDPROC, (__int3264)(LONG_PTR)OriginalWndProc);
+		}
 
 		g_PluginManager = nullptr;
-
 		ResetState();
 		ImGui::DestroyContext();
-		SetWindowLongPtrA(Window, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(OriginalWndProc));
 
+#ifdef USE_MINHOOK
+		MH_Uninitialize();
+#endif
 		return Status::Success;
 	}
 

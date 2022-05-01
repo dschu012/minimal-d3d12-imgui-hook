@@ -5,11 +5,13 @@
 #include <format>
 #include <filesystem>
 #include <wtsapi32.h>
+#include <Psapi.h>
 
 #pragma comment(lib, "Wtsapi32.lib")
 
 std::vector<DWORD> GetPIDs(std::wstring processName);
 std::wstring ExePath();
+void EjectDLL(const int& pid, const std::wstring& path);
 void InjectDLL(const int& pid, const std::wstring& path);
 
 /*
@@ -27,8 +29,11 @@ int main(int argc, char* argv[])
 	std::wcout << L"[+]Looking for to inject into \"" << wargv[1] << "\"" << std::endl;
 	std::vector<DWORD> pids = GetPIDs(wargv[1]);
 	for (auto& pid : pids) {
+		std::wstring dllName = L"overlay.dll";
+		std::wstring dllPath = std::format(L"{}\\{}", ExePath(), dllName);
 		std::wcout << L"[+]Injecting into " << pid << std::endl;
-		InjectDLL(pid, std::format(L"{}\\overlay.dll", ExePath()));
+		EjectDLL(pid, dllName);
+		InjectDLL(pid, dllPath);
 	}
 	exit(0);
 	//system("pause");
@@ -65,6 +70,49 @@ std::vector<DWORD> GetPIDs(std::wstring processName) {
 	return pids;
 }
 
+void EjectDLL(const int& pid, const std::wstring& path) {
+	HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, pid);
+	LPVOID dwModuleBaseAddress = 0;
+	if (hSnapshot == INVALID_HANDLE_VALUE) {
+		std::wcerr << L"[!]Fail to create tool help snapshot!" << std::endl;
+		exit(-1);
+	}
+
+	MODULEENTRY32 ModuleEntry32 = { 0 };
+	ModuleEntry32.dwSize = sizeof(MODULEENTRY32);
+	bool found = false;
+	if (Module32First(hSnapshot, &ModuleEntry32))
+	{
+		do
+		{
+			if (wcscmp(ModuleEntry32.szModule, path.c_str()) == 0)
+			{
+				found = true;
+				break;
+			}
+		} while (Module32Next(hSnapshot, &ModuleEntry32));
+	}
+	CloseHandle(hSnapshot);
+
+	if (found) {
+		HANDLE hProc = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
+
+		std::wcout << L"[+]DLL already injected. Ejecting first." << std::endl;
+		HMODULE hKernel32 = LoadLibrary(L"kernel32");
+		LPVOID lpStartAddress = GetProcAddress(hKernel32, "FreeLibrary");
+		HANDLE hThread = CreateRemoteThread(hProc, NULL, 0, reinterpret_cast<LPTHREAD_START_ROUTINE>(lpStartAddress), ModuleEntry32.modBaseAddr, 0, NULL);
+		if (hThread == NULL) {
+			std::wcerr << L"[!]Fail to create Remote Thread" << std::endl;
+			exit(-1);
+		}
+		WaitForSingleObject(hThread, INFINITE);
+
+		//FreeLibrary(hKernel32);
+		CloseHandle(hProc);
+		CloseHandle(hThread);
+	}
+}
+
 void InjectDLL(const int& pid, const std::wstring& path) {
 	if (!std::filesystem::exists(path)) {
 		std::wcerr << L"[!]Couldn't find DLL!" << std::endl;
@@ -93,17 +141,17 @@ void InjectDLL(const int& pid, const std::wstring& path) {
 	}
 	std::wcout << L"[+]Creating Remote Thread in Target Process" << std::endl;
 
-	DWORD dWord;
 	HMODULE hKernel32 = LoadLibrary(L"kernel32");
 	LPVOID lpStartAddress = GetProcAddress(hKernel32, "LoadLibraryW");
-	HANDLE hThread = CreateRemoteThread(hProc, NULL, 0, reinterpret_cast<LPTHREAD_START_ROUTINE>(lpStartAddress), lpAlloc, 0, &dWord);
+	HANDLE hThread = CreateRemoteThread(hProc, NULL, 0, reinterpret_cast<LPTHREAD_START_ROUTINE>(lpStartAddress), lpAlloc, 0, NULL);
 	if (hThread == NULL) {
 		std::wcerr << L"[!]Fail to create Remote Thread" << std::endl;
 		exit(-1);
 	}
+	WaitForSingleObject(hThread, INFINITE);
 
 	//VirtualFreeEx(hProc, lpAlloc, 0, MEM_RELEASE);
-	FreeLibrary(hKernel32);
+	//FreeLibrary(hKernel32);
 	CloseHandle(hProc);
 	CloseHandle(hThread);
 }
