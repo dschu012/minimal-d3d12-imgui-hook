@@ -18,7 +18,9 @@
 #define USE_DETOURS
 #elif __has_include(<MinHook.h>)
 #include <MinHook.h>
+#ifndef USE_DETOURS
 #define USE_MINHOOK
+#endif
 #else
 #error "No hooking library defined!"
 #endif
