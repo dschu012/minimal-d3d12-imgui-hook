@@ -14,6 +14,11 @@ std::wstring ExePath();
 void EjectDLL(const int& pid, const std::wstring& path);
 void InjectDLL(const int& pid, const std::wstring& path);
 
+//we copy/rename the dll because the game might be holding onto the file if it
+//is already injected
+#define ORIGINAL_DLL_NAME L"minimal-d3d12-imgui-hook.dll"
+#define RENAMED_DLL_NAME  L"overlay.dll"
+
 /*
 * Simple basic injector as a proof of concept. May or may not work on your game. Launch using 
 * ./minimal-d3d12-imgui-hook-injector.exe "MyGame.exe" or if running from Visual Studio's add
@@ -29,10 +34,12 @@ int main(int argc, char* argv[])
 	std::wcout << L"[+]Looking for to inject into \"" << wargv[1] << "\"" << std::endl;
 	std::vector<DWORD> pids = GetPIDs(wargv[1]);
 	for (auto& pid : pids) {
-		std::wstring dllName = L"overlay.dll";
-		std::wstring dllPath = std::format(L"{}\\{}", ExePath(), dllName);
+		std::wstring originalDllPath = std::format(L"{}\\{}", ExePath(), ORIGINAL_DLL_NAME);
+		std::wstring dllPath = std::format(L"{}\\{}", ExePath(), RENAMED_DLL_NAME);
 		std::wcout << L"[+]Injecting into " << pid << std::endl;
-		EjectDLL(pid, dllName);
+		EjectDLL(pid, RENAMED_DLL_NAME);
+		std::wcout << L"[+]Renaming DLL" << std::endl;
+		std::filesystem::copy(originalDllPath, dllPath, std::filesystem::copy_options::update_existing);
 		InjectDLL(pid, dllPath);
 	}
 	exit(0);

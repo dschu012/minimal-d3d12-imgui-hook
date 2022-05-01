@@ -6,8 +6,6 @@
 DWORD WINAPI AttachThread(LPVOID lParam) {
     if (D3D12::Init() == D3D12::Status::Success) {
         D3D12::InstallHooks();
-        //Sleep(5000);
-        //D3D12::RemoveHooks();
     }
     return 0;
 }

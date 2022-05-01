@@ -68,8 +68,8 @@ namespace D3D12 {
 	typedef long(__fastcall* ResizeBuffers)(IDXGISwapChain3* pSwapChain, UINT BufferCount, UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags);
 	static ResizeBuffers OriginalResizeBuffers;
 
-	WNDPROC	OriginalWndProc;
-	HWND Window = nullptr;
+	static WNDPROC OriginalWndProc;
+	static HWND Window = nullptr;
 
 	static uint64_t* g_MethodsTable = NULL;
 	static bool g_Initialized = false;
@@ -474,7 +474,7 @@ namespace D3D12 {
 		Unhook(140, (void**)&OriginalPresent, HookPresent);
 		Unhook(145, (void**)&OriginalResizeBuffers, HookResizeBuffers);
 
-		if (!Window && !OriginalWndProc) {
+		if (Window && OriginalWndProc) {
 			SetWindowLongPtr(Window, GWLP_WNDPROC, (__int3264)(LONG_PTR)OriginalWndProc);
 		}
 
