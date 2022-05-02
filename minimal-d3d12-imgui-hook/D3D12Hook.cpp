@@ -46,7 +46,7 @@ namespace D3D12 {
 
 	// Data
 	static std::vector<FrameContext> g_FrameContext;
-	static UINT							g_FrameBufferCount = 0;
+	static UINT						g_FrameBufferCount = 0;
 
 	static CComPtr<ID3D12DescriptorHeap> g_pD3DRtvDescHeap = NULL;
 	static CComPtr<ID3D12DescriptorHeap> g_pD3DSrvDescHeap = NULL;
@@ -72,8 +72,6 @@ namespace D3D12 {
 
 
 	static PluginManager* g_PluginManager;
-
-	static FILE* file;
 
 	long __fastcall HookPresent(IDXGISwapChain3* pSwapChain, UINT SyncInterval, UINT Flags) {
 		if (g_pD3DCommandQueue == nullptr) {
