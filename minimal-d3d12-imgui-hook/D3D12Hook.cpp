@@ -38,10 +38,6 @@ namespace D3D12 {
 	}
 
 	//https://github.com/ocornut/imgui/blob/master/examples/example_win32_directx12/main.cpp
-
-	//Depending on your game you might want to change this
-	static const UINT CommandListToUse = 1;
-
 	struct FrameContext {
 		CComPtr<ID3D12CommandAllocator> command_allocator = NULL;
 		CComPtr<ID3D12Resource> main_render_target_resource = NULL;
@@ -76,6 +72,8 @@ namespace D3D12 {
 
 
 	static PluginManager* g_PluginManager;
+
+	static FILE* file;
 
 	long __fastcall HookPresent(IDXGISwapChain3* pSwapChain, UINT SyncInterval, UINT Flags) {
 		if (g_pD3DCommandQueue == nullptr) {
@@ -203,13 +201,13 @@ namespace D3D12 {
 		g_pD3DCommandList->Close();
 
 		g_pD3DCommandQueue->ExecuteCommandLists(1, (ID3D12CommandList**)&g_pD3DCommandList);
-
 		return OriginalPresent(pSwapChain, SyncInterval, Flags);
 	}
 
 	void HookExecuteCommandLists(ID3D12CommandQueue* queue, UINT NumCommandLists, ID3D12CommandList* ppCommandLists) {
-		if (!g_pD3DCommandQueue && NumCommandLists == CommandListToUse)
+		if (!g_pD3DCommandQueue && queue->GetDesc().Type == D3D12_COMMAND_LIST_TYPE_DIRECT) {
 			g_pD3DCommandQueue = queue;
+		}
 
 		OriginalExecuteCommandLists(queue, NumCommandLists, ppCommandLists);
 	}
@@ -217,13 +215,14 @@ namespace D3D12 {
 	void ResetState() {
 		if (g_Initialized) {
 			g_Initialized = false;
-			g_FrameContext.clear();
-			g_pD3DCommandList = nullptr;
-			g_pD3DRtvDescHeap = nullptr;
-			g_pD3DSrvDescHeap = nullptr;
 			ImGui_ImplWin32_Shutdown();
 			ImGui_ImplDX12_Shutdown();
 		}
+		g_pD3DCommandQueue = nullptr;
+		g_FrameContext.clear();
+		g_pD3DCommandList = nullptr;
+		g_pD3DRtvDescHeap = nullptr;
+		g_pD3DSrvDescHeap = nullptr;
 	}
 
 	long HookResizeBuffers(IDXGISwapChain3* pSwapChain, UINT BufferCount, UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags) {
@@ -369,7 +368,6 @@ namespace D3D12 {
 
 		::DestroyWindow(window);
 		::UnregisterClass(windowClass.lpszClassName, windowClass.hInstance);
-
 		return Status::Success;
 	}
 
@@ -485,6 +483,8 @@ namespace D3D12 {
 #ifdef USE_MINHOOK
 		MH_Uninitialize();
 #endif
+		//wait for hooks to finish if in one. maybe not needed, but seemed more stable after adding it.
+		Sleep(1000);
 		return Status::Success;
 	}
 
