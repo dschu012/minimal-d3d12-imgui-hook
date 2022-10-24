@@ -58,7 +58,7 @@ DWORD64 Pattern::Scan(const wchar_t* szModule, const char* signature)
 	return NULL;
 }
 
-DWORD64 Pattern::ScanOp(const wchar_t* szModule, const char* signature, int32_t nOpCodeByteOffset)
+DWORD64 Pattern::ScanRef(const wchar_t* szModule, const char* signature, int32_t nOpCodeByteOffset)
 {
 	HANDLE hProcess = GetCurrentProcess();
 	HMODULE hModule = GetModuleHandle(szModule);

@@ -14,7 +14,7 @@ MyFunctionFromCallSig_t* MyFunctionFromCallSig;
 
 MyPlugin::MyPlugin() {
 	MyFunction = reinterpret_cast<MyFunction_t*>(Pattern::Scan(NULL, "48 83 EC 28 45 0F B7 C8 48 85 C9 74 42 48 8B 89 ? ? ? ? 48 85 C9 74 2F"));
-	MyFunctionFromCallSig =  reinterpret_cast<MyFunctionFromCallSig_t*>(Pattern::ScanOp(NULL, "E8 ? ? ? ? 8B 4F 05", 1));
+	MyFunctionFromCallSig =  reinterpret_cast<MyFunctionFromCallSig_t*>(Pattern::ScanRef(NULL, "E8 ? ? ? ? 8B 4F 05", 1));
 }
 
 */
@@ -26,6 +26,6 @@ public:
 	/*
 	Scans for a pattern that is address is in an opcode. i.e. `call sub_7FF7615FD0D0`, direct reference: [actual address in first opcode] E8 ? ? ? ? 8B 4F 05
 	*/
-	static DWORD64 ScanOp(const wchar_t* szModule, const char* signature, int32_t nOpCodeByteOffset = 0);
+	static DWORD64 ScanRef(const wchar_t* szModule, const char* signature, int32_t nOpCodeByteOffset = 0);
 };
 
