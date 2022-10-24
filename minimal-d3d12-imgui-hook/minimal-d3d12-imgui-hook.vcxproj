@@ -63,6 +63,7 @@
   <ItemGroup>
     <ClCompile Include="D3D12Hook.cpp" />
     <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="plugin\Pattern.cpp" />
     <ClCompile Include="plugin\PluginManager.cpp" />
     <ClCompile Include="plugin\sample\Sample.cpp" />
   </ItemGroup>
@@ -71,6 +72,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="D3D12Hook.h" />
+    <ClInclude Include="plugin\Pattern.h" />
     <ClInclude Include="plugin\Plugin.h" />
     <ClInclude Include="plugin\PluginManager.h" />
     <ClInclude Include="plugin\sample\Sample.h" />
