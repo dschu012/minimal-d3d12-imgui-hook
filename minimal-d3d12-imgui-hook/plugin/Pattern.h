@@ -3,7 +3,6 @@
 #include <cstdint>
 
 // https://www.unknowncheats.me/forum/general-programming-and-reversing/502738-ida-style-pattern-scanner.html
-// Ideally we should cache some of this info in this class for multiple scans...
 /*
 Sample Usage:
 typedef int64_t __fastcall MyFunction_t(void* pArg1, uint32_t nArg2);
@@ -24,7 +23,7 @@ class Pattern
 public:
 	static DWORD64 Scan(const wchar_t* szModule, const char* signature);
 	/*
-	Scans for a pattern that is address is in an opcode. i.e. `call sub_7FF7615FD0D0`, direct reference: [actual address in first opcode] E8 ? ? ? ? 8B 4F 05
+	Scans for a pattern that is address is referenced in an opcode. i.e. `call sub_7FF7615FD0D0`, direct reference: [actual address in first opcode] E8 ? ? ? ? 8B 4F 05
 	*/
 	static DWORD64 ScanRef(const wchar_t* szModule, const char* signature, int32_t nOpCodeByteOffset = 0);
 };

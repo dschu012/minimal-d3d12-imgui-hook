@@ -1,6 +1,10 @@
 #include "Pattern.h"
 #include <Psapi.h>
 #include <vector>
+#include <unordered_map>
+
+static HANDLE hProcess = GetCurrentProcess();
+static std::unordered_map<const wchar_t*, LPMODULEINFO> mModuleInfoMap = {};
 
 static auto pattern_to_byte = [](const char* pattern)
 {
@@ -25,17 +29,21 @@ static auto pattern_to_byte = [](const char* pattern)
 	return bytes;
 };
 
+static LPMODULEINFO GetModuleInfo(const wchar_t* szModule) {
+	if (mModuleInfoMap[szModule]) {
+		return mModuleInfoMap[szModule];
+	}
+	HMODULE hModule = GetModuleHandle(szModule);
+	mModuleInfoMap[szModule] = new MODULEINFO();
+	GetModuleInformation(hProcess, hModule, mModuleInfoMap[szModule], sizeof(MODULEINFO));
+	return mModuleInfoMap[szModule];
+}
+
 DWORD64 Pattern::Scan(const wchar_t* szModule, const char* signature)
 {
-	HANDLE hProcess = GetCurrentProcess();
-	HMODULE hModule = GetModuleHandle(szModule);
-	if (hModule == 0 || hProcess == 0) {
-		return NULL;
-	}
-	MODULEINFO mInfo = {};
-	GetModuleInformation(hProcess, hModule, &mInfo, sizeof(MODULEINFO));
-	DWORD64 base = (DWORD64)mInfo.lpBaseOfDll;
-	DWORD64 sizeOfImage = (DWORD64)mInfo.SizeOfImage;
+	auto lpmInfo = GetModuleInfo(szModule);
+	DWORD64 base = (DWORD64)lpmInfo->lpBaseOfDll;
+	DWORD64 sizeOfImage = (DWORD64)lpmInfo->SizeOfImage;
 	auto patternBytes = pattern_to_byte(signature);
 
 	DWORD64 patternLength = patternBytes.size();
@@ -60,15 +68,9 @@ DWORD64 Pattern::Scan(const wchar_t* szModule, const char* signature)
 
 DWORD64 Pattern::ScanRef(const wchar_t* szModule, const char* signature, int32_t nOpCodeByteOffset)
 {
-	HANDLE hProcess = GetCurrentProcess();
-	HMODULE hModule = GetModuleHandle(szModule);
-	if (hModule == 0 || hProcess == 0) {
-		return NULL;
-	}
-	MODULEINFO mInfo = {};
-	GetModuleInformation(hProcess, hModule, &mInfo, sizeof(MODULEINFO));
-	DWORD64 base = (DWORD64)mInfo.lpBaseOfDll;
-	DWORD64 sizeOfImage = (DWORD64)mInfo.SizeOfImage;
+	auto lpmInfo = GetModuleInfo(szModule);
+	DWORD64 base = (DWORD64)lpmInfo->lpBaseOfDll;
+	DWORD64 sizeOfImage = (DWORD64)lpmInfo->SizeOfImage;
 	auto patternBytes = pattern_to_byte(signature);
 
 	DWORD64 patternLength = patternBytes.size();
