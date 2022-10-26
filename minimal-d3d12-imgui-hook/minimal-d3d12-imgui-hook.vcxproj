@@ -61,9 +61,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="D2Ptrs.cpp" />
     <ClCompile Include="D3D12Hook.cpp" />
     <ClCompile Include="dllmain.cpp" />
-    <ClCompile Include="plugin\Pattern.cpp" />
+    <ClCompile Include="Pattern.cpp" />
     <ClCompile Include="plugin\PluginManager.cpp" />
     <ClCompile Include="plugin\sample\Sample.cpp" />
   </ItemGroup>
@@ -71,8 +72,9 @@
     <None Include="vcpkg.json" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="D2Ptrs.h" />
     <ClInclude Include="D3D12Hook.h" />
-    <ClInclude Include="plugin\Pattern.h" />
+    <ClInclude Include="Pattern.h" />
     <ClInclude Include="plugin\Plugin.h" />
     <ClInclude Include="plugin\PluginManager.h" />
     <ClInclude Include="plugin\sample\Sample.h" />
