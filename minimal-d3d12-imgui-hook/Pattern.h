@@ -4,17 +4,20 @@
 
 // https://www.unknowncheats.me/forum/general-programming-and-reversing/502738-ida-style-pattern-scanner.html
 // Use the next two creating globals header/class files.
-#define HEADER_FUNC_DEF(ret, conv, name, args) \
-	typedef ret conv name##_t##args##; \
-	extern name##_t* name##;
+#define FUNC_TYPEDEF(ret, conv, name, args) \
+	typedef ret conv name##_t##args##;
 
-#define CLASS_FUNC_DEF(name) \
+#define FUNC_DEF(name) \
 	name##_t* name##;
+
+#define EXTERN_FUNC_DEF(ret, conv, name, args) \
+	FUNC_TYPEDEF(ret, conv, name, args) \
+	extern FUNC_DEF(name)
 
 // Use this if you want it declared in only this class.
-#define FUNC_DEF(ret, conv, name, args) \
-	typedef ret conv name##_t##args##; \
-	name##_t* name##;
+#define LOCAL_FUNC_DEF(ret, conv, name, args) \
+	FUNC_TYPEDEF(ret, conv, name, args) \
+	FUNC_DEF(name)
 
 #define FUNC_PATTERN(name, mod, signature) \
 	name = reinterpret_cast<name##_t*>(Pattern::Scan(mod, signature));
@@ -23,15 +26,15 @@
 	name = reinterpret_cast<name##_t*>(Pattern::ScanRef(mod, signature, opCodeByteOffset));
 
 // Use the next two creating globals header/class files.
-#define HEADER_VAR_DEF(type, name) \
-	extern type* name##;
-
-#define CLASS_VAR_DEF(type, name) \
-	type* name##;
-
-// Use this if you want it declared in only this class.
 #define VAR_DEF(type, name) \
 	type* name##;
+
+#define EXTERN_VAR_DEF(type, name) \
+	extern VAR_DEF(type, name)
+
+// Use this if you want it declared in only this class.
+#define LOCAL_VAR_DEF(type, name) \
+	VAR_DEF(type, name)
 
 #define VAR_PATTERN(name, type, mod, signature) \
 	name = reinterpret_cast<type*>(Pattern::Scan(mod, signature));
@@ -42,18 +45,23 @@
 /*
 Sample Usage:
 Sample.h
+
 typedef int64_t __fastcall MyFunction_t(void* pArg1, uint32_t nArg2);
-MyFunction_t* MyFunction;
+extern MyFunction_t* MyFunction;
+
+typedef int64_t __fastcall MyFunctionFromCallSig_t(void* pArg1, uint32_t nArg2);
+extern MyFunctionFromCallSig_t* MyFunctionFromCallSig;
 
 OR
 
-HEADER_FUNC_DEF(int64_t, __fastcall, MyFunction, (void* pArg1, uint32_t nArg2));
+EXTERN_FUNC_DEF(int64_t, __fastcall, MyFunction, (void* pArg1, uint32_t nArg2));
+EXTERN_FUNC_DEF(int64_t, __fastcall, MyFunctionFromCallSig, (void* pArg1, uint32_t nArg2));
 
-typedef int64_t __fastcall MyFunctionFromCallSig_t(void* pArg1, uint32_t nArg2);
-MyFunctionFromCallSig_t* MyFunctionFromCallSig;
+Sample.cpp
 
+FUNC_DEF(MyFunction);
+FUNC_DEF(MyFunctionFromCallSig);
 
-CLASS_FUNC_DEF(MyFunction);
 MyPlugin::MyPlugin() {
 	MyFunction = reinterpret_cast<MyFunction_t*>(Pattern::Scan(NULL, "48 83 EC 28 45 0F B7 C8 48 85 C9 74 42 48 8B 89 ? ? ? ? 48 85 C9 74 2F"));
 	MyFunctionFromCallSig =  reinterpret_cast<MyFunctionFromCallSig_t*>(Pattern::ScanRef(NULL, "E8 ? ? ? ? 8B 4F 05", 1));
@@ -63,7 +71,6 @@ MyPlugin::MyPlugin() {
 	FUNC_PATTERN(MyFunction, NULL, "48 83 EC 28 45 0F B7 C8 48 85 C9 74 42 48 8B 89 ? ? ? ? 48 85 C9 74 2F");
 	FUNC_PATTERNREF(MyFunctionFromCallSig, NULL,  "E8 ? ? ? ? 8B 4F 05", 1);
 }
-
 */
 
 class Pattern
