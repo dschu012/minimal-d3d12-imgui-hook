@@ -51,6 +51,7 @@
       <PrecompiledHeaderFile>
       </PrecompiledHeaderFile>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <AdditionalOptions>/d1trimfile:"$(SolutionDir)\" %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -61,7 +62,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="D2Ptrs.cpp" />
     <ClCompile Include="D3D12Hook.cpp" />
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="Pattern.cpp" />
@@ -74,6 +74,7 @@
   <ItemGroup>
     <ClInclude Include="D2Ptrs.h" />
     <ClInclude Include="D3D12Hook.h" />
+    <ClInclude Include="Logging.h" />
     <ClInclude Include="Pattern.h" />
     <ClInclude Include="plugin\Plugin.h" />
     <ClInclude Include="plugin\PluginManager.h" />

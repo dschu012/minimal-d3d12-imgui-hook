@@ -39,6 +39,13 @@ static LPMODULEINFO GetModuleInfo(const wchar_t* szModule) {
 	return mModuleInfoMap[szModule];
 }
 
+DWORD64 Pattern::BaseAddress(const wchar_t* szModule)
+{
+	auto lpmInfo = GetModuleInfo(szModule);
+	return (DWORD64)lpmInfo->lpBaseOfDll;
+}
+
+
 DWORD64 Pattern::Scan(const wchar_t* szModule, const char* signature)
 {
 	auto lpmInfo = GetModuleInfo(szModule);

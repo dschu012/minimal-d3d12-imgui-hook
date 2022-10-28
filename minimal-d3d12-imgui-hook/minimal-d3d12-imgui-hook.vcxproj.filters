@@ -16,5 +16,6 @@
     <ClInclude Include="plugin\Plugin.h" />
     <ClInclude Include="plugin\sample\Sample.h" />
     <ClInclude Include="Pattern.h" />
+    <ClInclude Include="Logging.h" />
   </ItemGroup>
 </Project>

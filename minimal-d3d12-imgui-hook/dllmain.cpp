@@ -2,6 +2,16 @@
 #include "D3D12Hook.h"
 #include <utility>
 #include <fstream>
+#include "Logging.h"
+
+DWORD WINAPI CreateConsole() {
+    AllocConsole();
+    AttachConsole(GetCurrentProcessId());
+    freopen_s(reinterpret_cast<FILE**>(stdin), "CONIN$", "r", stdin);
+    freopen_s(reinterpret_cast<FILE**>(stdout), "CONOUT$", "w", stdout);
+    freopen_s(reinterpret_cast<FILE**>(stderr), "CONOUT$", "w", stderr);
+    return 0;
+}
 
 DWORD WINAPI AttachThread(LPVOID lParam) {
     if (D3D12::Init() == D3D12::Status::Success) {
@@ -18,6 +28,9 @@ BOOL APIENTRY DllMain( HMODULE hModule,
     switch (ul_reason_for_call)
     {
     case DLL_PROCESS_ATTACH: {
+#ifndef NDEBUG
+        CreateConsole();
+#endif
         DisableThreadLibraryCalls(hModule);
         CreateThread(nullptr, 0, &AttachThread, static_cast<LPVOID>(hModule), 0, nullptr);
         break;
