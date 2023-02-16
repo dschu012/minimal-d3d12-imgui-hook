@@ -474,7 +474,7 @@ namespace D3D12 {
 			SetWindowLongPtr(Window, GWLP_WNDPROC, (__int3264)(LONG_PTR)OriginalWndProc);
 		}
 
-		g_PluginManager = nullptr;
+		delete g_PluginManager;
 		ResetState();
 		ImGui::DestroyContext();
 

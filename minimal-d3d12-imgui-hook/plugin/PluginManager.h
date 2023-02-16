@@ -11,6 +11,7 @@ private:
 	bool m_ShowSettings = true;
 public:
 	PluginManager();
+	~PluginManager();
 	void Present();
 	void WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 };

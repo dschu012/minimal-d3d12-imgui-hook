@@ -1,9 +1,20 @@
 #include "PluginManager.h"
 #include "sample/Sample.h"
 #include <imgui.h>
+#include "../Logging.h"
 
 PluginManager::PluginManager() {
+	LOG("Comment out #undef NDEBUG in Logging.h to disable this console.");
 	m_Plugins.push_back(new Sample());
+	for (auto& plugin : m_Plugins) {
+		plugin->OnLoad();
+	}
+}
+
+PluginManager::~PluginManager() {
+	for (auto& plugin : m_Plugins) {
+		plugin->OnUnload();
+	}
 }
 
 void PluginManager::Present() {

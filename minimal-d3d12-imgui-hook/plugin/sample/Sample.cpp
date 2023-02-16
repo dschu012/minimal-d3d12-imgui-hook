@@ -1,5 +1,13 @@
 #include "Sample.h"
 #include <imgui.h>
+#include <array>
+
+void Sample::OnLoad() {
+}
+
+void Sample::OnUnload() {
+	
+}
 
 void Sample::OnDraw() {
 	auto drawList = ImGui::GetBackgroundDrawList();

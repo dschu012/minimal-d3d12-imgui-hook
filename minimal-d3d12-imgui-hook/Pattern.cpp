@@ -6,29 +6,6 @@
 static HANDLE hProcess = GetCurrentProcess();
 static std::unordered_map<const wchar_t*, LPMODULEINFO> mModuleInfoMap = {};
 
-static auto pattern_to_byte = [](const char* pattern)
-{
-	auto bytes = std::vector<char>{};
-	auto start = const_cast<char*>(pattern);
-	auto end = const_cast<char*>(pattern) + strlen(pattern);
-
-	for (auto current = start; current < end; ++current)
-	{
-		if (*current == '?')
-		{
-			++current;
-			if (*current == '?')
-				++current;
-			bytes.push_back('\?');
-		}
-		else
-		{
-			bytes.push_back(static_cast<uint8_t>(strtoul(current, &current, 16)));
-		}
-	}
-	return bytes;
-};
-
 static LPMODULEINFO GetModuleInfo(const wchar_t* szModule) {
 	if (mModuleInfoMap[szModule]) {
 		return mModuleInfoMap[szModule];
@@ -46,24 +23,20 @@ DWORD64 Pattern::BaseAddress(const wchar_t* szModule)
 }
 
 
-DWORD64 Pattern::Scan(const wchar_t* szModule, const char* signature)
+DWORD64 Pattern::Scan(const wchar_t* szModule, const std::span<const int> sPattern)
 {
 	auto lpmInfo = GetModuleInfo(szModule);
 	DWORD64 base = (DWORD64)lpmInfo->lpBaseOfDll;
 	DWORD64 sizeOfImage = (DWORD64)lpmInfo->SizeOfImage;
-	auto patternBytes = pattern_to_byte(signature);
-
-	DWORD64 patternLength = patternBytes.size();
-	auto data = patternBytes.data();
-
+	
+	unsigned int patternLength = sPattern.size();
 	for (DWORD64 i = 0; i < sizeOfImage - patternLength; i++)
 	{
 		bool found = true;
-		for (DWORD64 j = 0; j < patternLength; j++)
+		for (DWORD64 j = 0; j < patternLength && found; j++)
 		{
-			char a = '\?';
 			char b = *(char*)(base + i + j);
-			found &= data[j] == a || data[j] == b;
+			found &= sPattern[j] == -1 || static_cast<char>(sPattern[j]) == b;
 		}
 		if (found)
 		{
@@ -73,24 +46,21 @@ DWORD64 Pattern::Scan(const wchar_t* szModule, const char* signature)
 	return NULL;
 }
 
-DWORD64 Pattern::ScanRef(const wchar_t* szModule, const char* signature, int32_t nOpCodeByteOffset)
+DWORD64 Pattern::ScanRef(const wchar_t* szModule, const std::span<const int> sPattern, int32_t nOpCodeByteOffset)
 {
 	auto lpmInfo = GetModuleInfo(szModule);
 	DWORD64 base = (DWORD64)lpmInfo->lpBaseOfDll;
 	DWORD64 sizeOfImage = (DWORD64)lpmInfo->SizeOfImage;
-	auto patternBytes = pattern_to_byte(signature);
 
-	DWORD64 patternLength = patternBytes.size();
-	auto data = patternBytes.data();
+	unsigned int patternLength = sPattern.size();
 
 	for (DWORD64 i = 0; i < sizeOfImage - patternLength; i++)
 	{
 		bool found = true;
-		for (DWORD64 j = 0; j < patternLength; j++)
+		for (DWORD64 j = 0; j < patternLength && found; j++)
 		{
-			char a = '\?';
 			char b = *(char*)(base + i + j);
-			found &= data[j] == a || data[j] == b;
+			found &= sPattern[j] == -1 || static_cast<char>(sPattern[j]) == b;
 		}
 		if (found)
 		{

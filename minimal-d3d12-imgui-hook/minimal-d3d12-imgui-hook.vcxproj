@@ -17,7 +17,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -72,13 +72,13 @@
     <None Include="vcpkg.json" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="D2Ptrs.h" />
     <ClInclude Include="D3D12Hook.h" />
     <ClInclude Include="Logging.h" />
     <ClInclude Include="Pattern.h" />
     <ClInclude Include="plugin\Plugin.h" />
     <ClInclude Include="plugin\PluginManager.h" />
     <ClInclude Include="plugin\sample\Sample.h" />
+    <ClInclude Include="stb.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
